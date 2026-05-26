@@ -1,11 +1,19 @@
 
 console.log("Starting server...");
 console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
+console.log("Step 1: about to load imports");
 
 import express, { type Request, Response, NextFunction } from "express";
+console.log("Step 2: express loaded");
+
 import { registerRoutes } from "./routes";
+
+console.log("Step 3: routes loaded");
 import { serveStatic } from "./static";
+console.log("Step 4: static loaded");
+
 import { createServer } from "http";
+console.log("Step 5: all imports done");
 
 const app = express();
 const httpServer = createServer(app);
