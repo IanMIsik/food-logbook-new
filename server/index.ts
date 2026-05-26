@@ -1,4 +1,3 @@
-
 console.log("Starting server...");
 console.log("DATABASE_URL set:", !!process.env.DATABASE_URL);
 console.log("Step 1: about to load imports");
@@ -7,8 +6,8 @@ import express, { type Request, Response, NextFunction } from "express";
 console.log("Step 2: express loaded");
 
 import { registerRoutes } from "./routes";
-
 console.log("Step 3: routes loaded");
+
 import { serveStatic } from "./static";
 console.log("Step 4: static loaded");
 
@@ -63,7 +62,6 @@ app.use((req, res, next) => {
       if (capturedJsonResponse) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
-
       log(logLine);
     }
   });
@@ -72,39 +70,41 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await registerRoutes(httpServer, app);
+  try {
+    console.log("Step 6: entering async setup");
+    await registerRoutes(httpServer, app);
+    console.log("Step 7: routes registered");
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+      const status = err.status || err.statusCode || 500;
+      const message = err.message || "Internal Server Error";
+      res.status(status).json({ message });
+      throw err;
+    });
 
-    res.status(status).json({ message });
-    throw err;
-  });
+    if (process.env.NODE_ENV === "production") {
+      console.log("Step 8: serving static files");
+      serveStatic(app);
+    } else {
+      console.log("Step 8: setting up vite dev server");
+      const { setupVite } = await import("./vite");
+      await setupVite(httpServer, app);
+    }
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (process.env.NODE_ENV === "production") {
-    serveStatic(app);
-  } else {
-    const { setupVite } = await import("./vite");
-    await setupVite(httpServer, app);
+    const port = parseInt(process.env.PORT || "5000", 10);
+    console.log("Step 9: about to listen on port", port);
+    httpServer.listen(
+      {
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${port}`);
+      },
+    );
+  } catch (err) {
+    console.error("STARTUP ERROR:", err);
+    process.exit(1);
   }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
 })();
