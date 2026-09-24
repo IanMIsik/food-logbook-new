@@ -1,0 +1,17 @@
+# Local/single-host convenience wrapper around `docker build` + `docker run`.
+# The database itself is NOT run here -- DATABASE_URL points at an external
+# Postgres (e.g. the Railway instance this repo already uses), so there's
+# no volume/service to manage for it on this host.
+#
+# DATABASE_URL is read from the *shell environment* or an optional .env
+# file next to this one (Compose's own variable-substitution mechanism).
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL must be set (see .env)}
+    restart: unless-stopped
