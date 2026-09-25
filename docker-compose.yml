@@ -1,11 +1,27 @@
-# Local/single-host convenience wrapper around `docker build` + `docker run`.
-# The database itself is NOT run here -- DATABASE_URL points at an external
-# Postgres (e.g. the Railway instance this repo already uses), so there's
-# no volume/service to manage for it on this host.
-#
-# DATABASE_URL is read from the *shell environment* or an optional .env
-# file next to this one (Compose's own variable-substitution mechanism).
+# Full self-hosted stack: the app AND its Postgres database both run on
+# this host. db's data lives in the named volume "pgdata", which survives
+# `docker compose down` / rebuilds / reboots -- only `docker compose down -v`
+# or deleting the volume wipes it.
 services:
+  db:
+    image: postgres:18
+    environment:
+      - POSTGRES_USER=food_logbook
+      - POSTGRES_PASSWORD=${DB_PASSWORD:?DB_PASSWORD must be set (see .env)}
+      - POSTGRES_DB=food_logbook
+    volumes:
+      # postgres:18+ images store data in a version-specific subdirectory
+      # under /var/lib/postgresql itself now, not .../data -- mounting the
+      # volume there directly (the old pre-18 convention) makes the image
+      # refuse to start. See https://github.com/docker-library/postgres/pull/1259
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U food_logbook -d food_logbook"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   app:
     build: .
     ports:
@@ -13,5 +29,14 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=5000
-      - DATABASE_URL=${DATABASE_URL:?DATABASE_URL must be set (see .env)}
+      - DATABASE_URL=postgresql://food_logbook:${DB_PASSWORD:?DB_PASSWORD must be set (see .env)}@db:5432/food_logbook
+      # db is reached over the private Docker network below, not the public
+      # internet -- no SSL configured on it, so the app must not require SSL.
+      - DATABASE_SSL=false
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  pgdata:

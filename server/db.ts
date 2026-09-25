@@ -10,8 +10,16 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+// Hosted providers (Railway, Neon, Supabase, ...) require SSL in production.
+// A self-hosted Postgres reached over a private Docker network doesn't have
+// SSL configured, so DATABASE_SSL=false opts out of the production default.
+const useSsl =
+  process.env.DATABASE_SSL === "false"
+    ? false
+    : process.env.NODE_ENV === "production";
+
 export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
 });
 export const db = drizzle(pool, { schema });
