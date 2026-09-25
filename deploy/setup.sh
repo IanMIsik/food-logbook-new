@@ -67,7 +67,7 @@ sudo docker compose up -d db
 echo "    Waiting for Postgres to become healthy..."
 ready=""
 for i in $(seq 1 30); do
-  if sudo docker compose exec -T db pg_isready -U food_logbook -d food_logbook >/dev/null 2>&1; then
+  if sudo docker compose exec -T db pg_isready -U food_logbook -d food_logbook < /dev/null >/dev/null 2>&1; then
     ready=1
     break
   fi
@@ -79,16 +79,23 @@ if [ -z "$ready" ]; then
 fi
 
 set -a; source .env; set +a
+# `< /dev/null` on every `docker compose exec` below is load-bearing, not
+# style: sudo's `use_pty` setting (Ubuntu's default) allocates a fresh pty
+# for each of these, and without stdin explicitly closed off, the nested
+# docker-compose subprocess can end up backgrounded relative to that new
+# pty and get SIGTTIN-stopped trying to read from it -- it then hangs
+# forever (visible as state "T" in `ps aux`), not because of anything slow
+# in Postgres itself. Confirmed by reproducing this exact hang 3 times.
 SCHEMA_EXISTS="$(sudo docker compose exec -T db psql -U food_logbook -d food_logbook -tAc \
-  "select 1 from information_schema.tables where table_name = 'foods'" || true)"
+  "select 1 from information_schema.tables where table_name = 'foods'" < /dev/null || true)"
 
 if [ "$SCHEMA_EXISTS" != "1" ]; then
   if [ -f "$SEED_DUMP" ]; then
     echo "==> Empty database, found $SEED_DUMP -- restoring it"
     sudo docker compose cp "$SEED_DUMP" db:/tmp/seed.dump
     sudo docker compose exec -T db pg_restore -U food_logbook -d food_logbook \
-      --no-owner --no-privileges /tmp/seed.dump
-    sudo docker compose exec -T db rm /tmp/seed.dump
+      --no-owner --no-privileges /tmp/seed.dump < /dev/null
+    sudo docker compose exec -T db rm /tmp/seed.dump < /dev/null
   else
     echo "==> Empty database, no seed dump found -- creating schema from scratch"
     # drizzle-kit is a devDependency, not present in the app's runtime image,
@@ -96,7 +103,7 @@ if [ "$SCHEMA_EXISTS" != "1" ]; then
     sudo docker build --target builder -t food-logbook-builder .
     sudo docker run --rm --network "$(basename "$APP_DIR")_default" \
       -e DATABASE_URL="postgresql://food_logbook:${DB_PASSWORD}@db:5432/food_logbook" \
-      food-logbook-builder npx drizzle-kit push --force
+      food-logbook-builder npx drizzle-kit push --force < /dev/null
   fi
 else
   echo "==> Database already has data -- leaving it as-is"
