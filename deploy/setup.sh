@@ -65,12 +65,15 @@ fi
 echo "==> Starting the database"
 sudo docker compose up -d db
 echo "    Waiting for Postgres to become healthy..."
+ready=""
 for i in $(seq 1 30); do
-  status="$(sudo docker compose ps db --format '{{.Health}}' 2>/dev/null || true)"
-  [ "$status" = "healthy" ] && break
+  if sudo docker compose exec -T db pg_isready -U food_logbook -d food_logbook >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
   sleep 2
 done
-if [ "$status" != "healthy" ]; then
+if [ -z "$ready" ]; then
   echo "Postgres did not become healthy in time -- check 'sudo docker compose logs db'"
   exit 1
 fi
