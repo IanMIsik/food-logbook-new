@@ -10,9 +10,17 @@ set -euo pipefail
 # (no Railway/Neon/etc) -- it runs in its own container on this same
 # instance, with its data in a persistent Docker volume.
 #
-# Idempotent -- safe to re-run after a `git pull` to rebuild and pick up
-# new commits, or if a step failed partway through the first time. It
-# will not re-seed or overwrite a database that already has data in it.
+# The app image is PULLED from Docker Hub, not built here -- this app's
+# build (Vite + esbuild) needs more RAM than a small instance comfortably
+# has, and building it in place has been observed to exhaust memory and
+# hang the whole instance. To publish a new version after code changes,
+# run deploy/build-and-push.sh from a dev machine first, then re-run this
+# script (or just `git pull && sudo docker compose pull app && sudo
+# docker compose up -d app`) on the instance to pick it up.
+#
+# Idempotent -- safe to re-run after a `git pull` to pick up new commits,
+# or if a step failed partway through the first time. It will not re-seed
+# or overwrite a database that already has data in it.
 #
 # Usage: bash deploy/setup.sh [repo_url] [server_name]
 #   repo_url     defaults to this project's GitHub URL
@@ -109,8 +117,9 @@ else
   echo "==> Database already has data -- leaving it as-is"
 fi
 
-echo "==> Building and starting the app container"
-sudo docker compose up -d --build app
+echo "==> Pulling and starting the app container"
+sudo docker compose pull app
+sudo docker compose up -d app
 
 echo "==> Configuring Nginx reverse proxy (port 80 -> 127.0.0.1:$APP_PORT)"
 sudo tee /etc/nginx/sites-available/food-logbook > /dev/null <<EOF

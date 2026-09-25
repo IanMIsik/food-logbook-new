@@ -23,6 +23,13 @@ services:
     restart: unless-stopped
 
   app:
+    # Pre-built and pushed from a dev machine (see deploy/build-and-push.sh)
+    # rather than built on the EC2 instance itself -- this app's build
+    # (Vite + esbuild, React + Radix UI) needs more RAM than a small
+    # instance comfortably has; building in place has been observed to
+    # exhaust memory and hang the whole instance. `build: .` is kept so
+    # `docker compose build` still works for local dev/testing.
+    image: ${DOCKER_IMAGE:-ianmisik/food-logbook-new:latest}
     build: .
     ports:
       - "5000:5000"
